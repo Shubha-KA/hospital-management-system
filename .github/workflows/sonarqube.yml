@@ -10,75 +10,75 @@ jobs:
   scan:
     runs-on: ubuntu-latest
 
+    steps: 
+      - name: Checkout Code 
+        uses: actions/checkout@v4 
+        
+      - name: Setup Node.js 
+        uses: actions/setup-node@v4 
+        with: 
+          node-version: '18' 
+          
+      - name: Install Dependencies 
+        working-directory: ./backend 
+        run: npm install 
+        
+      - name: Run Tests (optional) 
+        working-directory: ./backend 
+        run: npm test || true 
+        
+      - name: SonarQube Scan 
+        uses: SonarSource/sonarqube-scan-action@v2 
+        env: 
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }} 
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }} 
+        
+        with: 
+          args: > 
+            -Dsonar.projectKey=hospital-management-system 
+            -Dsonar.sources=backend 
+            
+      - name: Install jq 
+        run: sudo apt-get install jq -y 
+        
+      - name: Check Quality Gate 
+        id: qualitygate 
+        run: | 
+          echo "Waiting for SonarQube analysis..." 
+          sleep 30 
+          STATUS=$(curl -s -u ${{ secrets.SONAR_TOKEN }}: \ 
+          "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=hospital-management-system" \ 
+          | jq -r '.projectStatus.status') 
+          
+          echo "Quality Gate Status: $STATUS" 
+          echo "status=$STATUS" >> $GITHUB_OUTPUT 
+          
+      - name: Fail Pipeline if Quality Gate Fails 
+        if: steps.qualitygate.outputs.status != 'OK' 
+        run: exit 1 
 
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install Dependencies
-        working-directory: ./backend
-        run: npm install
-
-      - name: Run Tests (optional)
-        working-directory: ./backend
-        run: npm test || true
-
-      - name: Install SonarScanner
-        run: |
-          wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.zip
-          unzip sonar-scanner-cli-5.0.1.zip
-          mv sonar-scanner-5.0.1 sonar-scanner
-
-      - name: Run SonarQube Scan
-        run: |
-          ./sonar-scanner/bin/sonar-scanner \
-            -Dsonar.projectKey=hospital-management-system \
-            -Dsonar.sources=. \
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-
-      - name: Install jq
-        run: sudo apt-get install jq -y
-
-      - name: Check Quality Gate
-        id: qualitygate
-        run: |
-          sleep 20
-          STATUS=$(curl -s -u ${{ secrets.SONAR_TOKEN }}: \
-          "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=hospital-management-system" \
-          | jq -r '.projectStatus.status')
-
-          echo "Quality Gate Status: $STATUS"
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-
-      - name: Send Email - Failure
-        if: steps.qualitygate.outputs.status != 'OK'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 587
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "❌ Pipeline Failed - Vulnerabilities Found"
-          body: "SonarQube detected vulnerabilities in hospital-management-system."
-          to: ${{ secrets.EMAIL_TO }}
+      - name: Send Email - Failure 
+        if: failure() 
+        uses: dawidd6/action-send-mail@v3 
+        with: 
+          server_address: smtp.gmail.com 
+          server_port: 587 
+          username: ${{ secrets.EMAIL_USERNAME }} 
+          password: ${{ secrets.EMAIL_PASSWORD }} 
+          subject: "❌ Pipeline Failed - Vulnerabilities Found" 
+          body: "SonarQube detected vulnerabilities in hospital-management-system." 
+          to: ${{ secrets.EMAIL_TO }} 
+          from: GitHub Actions 
+          
+      - name: Send Email - Success 
+        if: success() 
+        uses: dawidd6/action-send-mail@v3 
+        with: 
+          server_address: smtp.gmail.com 
+          server_port: 587 
+          username: ${{ secrets.EMAIL_USERNAME }} 
+          password: ${{ secrets.EMAIL_PASSWORD }} 
+          subject: "✅ Pipeline Successful" 
+          body: "No vulnerabilities found. Code quality is good." 
+          to: ${{ secrets.EMAIL_TO }} 
           from: GitHub Actions
-
-      - name: Send Email - Success
-        if: steps.qualitygate.outputs.status == 'OK'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 587
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "✅ Pipeline Successful"
-          body: "No vulnerabilities found. Code quality is good."
-          to: ${{ secrets.EMAIL_TO }}
-          from: GitHub Actions
-
