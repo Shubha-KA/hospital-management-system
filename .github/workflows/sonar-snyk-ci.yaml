@@ -24,9 +24,6 @@ jobs:
         working-directory: ./backend
         run: npm install
 
-      # ---------------------------
-      # 🔐 SNYK SCAN
-      # ---------------------------
       - name: Install Snyk
         run: npm install -g snyk
 
@@ -37,9 +34,6 @@ jobs:
         working-directory: ./backend
         run: snyk test --json > snyk-report.json || true
 
-      # ---------------------------
-      # 🔍 SONARQUBE SCAN
-      # ---------------------------
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v6
         env:
@@ -53,18 +47,12 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # ---------------------------
-      # 📄 FETCH SONAR REPORT
-      # ---------------------------
       - name: Fetch Sonar Report
         run: |
           curl -u ${{ secrets.SONAR_TOKEN }}: \
           "${{ secrets.SONAR_HOST_URL }}/api/issues/search?projectKeys=hospital-management-system" \
           > sonar-report.json
 
-      # ---------------------------
-      # 🧠 DECISION LOGIC
-      # ---------------------------
       - name: Check Snyk Vulnerabilities
         id: snykcheck
         run: |
@@ -74,16 +62,10 @@ jobs:
             echo "status=PASS" >> $GITHUB_OUTPUT
           fi
 
-      # ---------------------------
-      # ❌ FAIL PIPELINE IF ISSUES
-      # ---------------------------
       - name: Fail if Issues Found
         if: steps.qualitygate.outputs.quality_gate_status != 'PASSED' || steps.snykcheck.outputs.status == 'FAIL'
         run: exit 1
 
-      # ---------------------------
-      # 📧 EMAIL - FAILURE
-      # ---------------------------
       - name: Send Email - Failure
         if: failure()
         uses: dawidd6/action-send-mail@v3
@@ -104,9 +86,6 @@ jobs:
 
             Please review reports.
 
-      # ---------------------------
-      # 📧 EMAIL - SUCCESS
-      # ---------------------------
       - name: Send Email - Success
         if: success()
         uses: dawidd6/action-send-mail@v3
