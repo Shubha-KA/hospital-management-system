@@ -29,8 +29,8 @@ jobs:
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "GitHub Actions Build Status"
-          to: ${{ secrets.EMAIL_TO}}
-          from: ${{ secrets.EMAIL_USERNAME }}
+          to: shubhaambareesh@gmail.com
+          from: shubha03ka@gmail.com
           body: |
             Build Status: ${{ job.status }}
             Repository: ${{ github.repository }}
