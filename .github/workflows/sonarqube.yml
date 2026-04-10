@@ -21,9 +21,11 @@ jobs:
           node-version: '18'
 
       - name: Install Dependencies
+        working-directory: ./backend
         run: npm install
 
       - name: Run Tests (optional)
+        working-directory: ./backend
         run: npm test || true
 
       - name: Install SonarScanner
