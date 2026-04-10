@@ -1,0 +1,127 @@
+name: DevSecOps Pipeline (SonarQube + Snyk)
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        working-directory: ./backend
+        run: npm install
+
+      # ---------------------------
+      # 🔐 SNYK SCAN
+      # ---------------------------
+      - name: Install Snyk
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+
+      - name: Run Snyk Test
+        working-directory: ./backend
+        run: snyk test --json > snyk-report.json || true
+
+      # ---------------------------
+      # 🔍 SONARQUBE SCAN
+      # ---------------------------
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: Quality Gate Check
+        id: qualitygate
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # ---------------------------
+      # 📄 FETCH SONAR REPORT
+      # ---------------------------
+      - name: Fetch Sonar Report
+        run: |
+          curl -u ${{ secrets.SONAR_TOKEN }}: \
+          "${{ secrets.SONAR_HOST_URL }}/api/issues/search?projectKeys=hospital-management-system" \
+          > sonar-report.json
+
+      # ---------------------------
+      # 🧠 DECISION LOGIC
+      # ---------------------------
+      - name: Check Snyk Vulnerabilities
+        id: snykcheck
+        run: |
+          if grep -q '"severity":"high"' snyk-report.json || grep -q '"severity":"critical"' snyk-report.json; then
+            echo "status=FAIL" >> $GITHUB_OUTPUT
+          else
+            echo "status=PASS" >> $GITHUB_OUTPUT
+          fi
+
+      # ---------------------------
+      # ❌ FAIL PIPELINE IF ISSUES
+      # ---------------------------
+      - name: Fail if Issues Found
+        if: steps.qualitygate.outputs.quality_gate_status != 'PASSED' || steps.snykcheck.outputs.status == 'FAIL'
+        run: exit 1
+
+      # ---------------------------
+      # 📧 EMAIL - FAILURE
+      # ---------------------------
+      - name: Send Email - Failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "❌ Pipeline Failed - Security Issues Found"
+          to: ${{ secrets.EMAIL_TO }}
+          from: ${{ secrets.EMAIL_USERNAME }}
+          attachments: sonar-report.json,snyk-report.json
+          body: |
+            ❌ Security issues detected.
+
+            SonarQube: ${{ steps.qualitygate.outputs.quality_gate_status }}
+            Snyk: FAILED
+
+            Please review reports.
+
+      # ---------------------------
+      # 📧 EMAIL - SUCCESS
+      # ---------------------------
+      - name: Send Email - Success
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "✅ Pipeline Successful - No Issues"
+          to: ${{ secrets.EMAIL_TO }}
+          from: ${{ secrets.EMAIL_USERNAME }}
+          attachments: sonar-report.json,snyk-report.json
+          body: |
+            ✅ No vulnerabilities found.
+
+            SonarQube: PASSED
+            Snyk: PASSED
+    
